@@ -10,6 +10,7 @@ import { VerifyToken } from './middleware/VerifyToken';
 import authRoutes from './routes/Auth';
 import exerciseRoutes from './routes/Exercise';
 import workoutRoutes from './routes/Workout';
+import requestRoutes from './routes/Request';
 import swaggerUi from 'swagger-ui-express'; // permite mostrar Swagger en el navegador.
 import swaggerDocument from './config/swagger'; // importa el documento que hemos creado en swagger.ts
 import { Server } from 'socket.io';
@@ -48,6 +49,7 @@ const StartServer = () => {
     // Las escrituras siguen siendo solo de ADMIN y eso se comprueba en cada router.
     router.use('/exercises', VerifyToken, exerciseRoutes);
     router.use('/workouts', VerifyToken, workoutRoutes);
+    router.use('/requests', VerifyToken, requestRoutes);
     // La lista de usuarios es para el chat, así que cualquier usuario autenticado puede consultarla.
     // Las escrituras (POST y PUT) y el detalle por id son solo para ADMIN, y eso se comprueba
     // en src/routes/Users.ts, porque aquí el montaje es el mismo para todas las rutas del router.
