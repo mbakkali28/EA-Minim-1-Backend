@@ -3,6 +3,7 @@ import Joi, { ObjectSchema } from 'joi';
 import { NextFunction, Request, Response } from 'express';
 
 import { EXERCISE_CATEGORIES,  IExercise } from '../models/Exercise';
+import { IRequest, REQUEST_STATUSES, REQUEST_TYPES } from '../models/Request';
 import { DAYS_OF_WEEK,  IWorkout } from '../models/Workout';
 import { IUser, USER_ROLES } from '../models/User';
 
@@ -99,6 +100,16 @@ export const Schemas = {
             // Columnas por las que se pueden ordenar las rutinas
             ...sortQuery(['name', 'description', 'dayOfWeek'])
         }),
+        // Listado de solicitudes: el texto se combina con el estado, el tipo o la rutina
+        request: Joi.object({
+            ...listQuery,
+            status: Joi.string().valid(...REQUEST_STATUSES),
+            type: Joi.string().valid(...REQUEST_TYPES),
+            workout: Joi.string().regex(OBJECT_ID),
+            ...sortQuery(['subject', 'status', 'type', 'preferredDate', 'createdAt']),
+            // En las solicitudes lo natural es ver primero las mas nuevas
+            order: Joi.string().valid('asc', 'desc').default('desc')
+        }),
         user: Joi.object({
             ...listQuery,
             // Los usuarios solo se pueden ordenar por nombre
@@ -184,6 +195,18 @@ export const Schemas = {
             // El resto de campos son opcionales
             description: Joi.string().allow('').optional(),
             exercises: Joi.array().items(Joi.string().regex(OBJECT_ID))
+        })
+    },
+
+    // Validaciones relacionadas con las solicitudes sobre rutinas
+    request: {
+        // Alta de una solicitud
+        create: Joi.object<IRequest>({
+            type: Joi.string().valid(...REQUEST_TYPES).required().example('RESERVA'),
+            subject: Joi.string().trim().min(3).max(100).required(),
+            description: Joi.string().trim().max(500).allow('').optional(),
+            preferredDate: Joi.date().iso().optional(),
+            workout: Joi.string().regex(OBJECT_ID).required()
         })
     },
 
