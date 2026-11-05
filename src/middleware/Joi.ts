@@ -207,6 +207,20 @@ export const Schemas = {
             description: Joi.string().trim().max(500).allow('').optional(),
             preferredDate: Joi.date().iso().optional(),
             workout: Joi.string().regex(OBJECT_ID).required()
+        }),
+
+        // Edicion de un solicitud
+        update: Joi.object<Partial<IRequest>>({
+            subject: Joi.string().trim().min(3).max(100),
+            description: Joi.string().trim().max(500).allow(''),
+            type: Joi.string().valid(...REQUEST_TYPES),
+            preferredDate: Joi.date().iso()
+        }).min(1),
+
+        // Cambio de estado.
+        status: Joi.object<{ status: IRequest['status']; comment?: string }>({
+            status: Joi.string().valid(...REQUEST_STATUSES).required(),
+            comment: Joi.string().trim().max(300).allow('')
         })
     },
 
