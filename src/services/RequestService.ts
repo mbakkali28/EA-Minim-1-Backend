@@ -106,9 +106,141 @@ export const listRequests = async (
     return { requests, pagination: buildPageInfo(page, limit, total) };
 };
 
+export type UpdateRequestInput = Partial<Pick<IRequest, 'subject' | 'description' | 'type' | 'preferredDate'>>;
+
+// Actualiza la request
+export const updateRequest = async (
+    requestId: string,
+    data: UpdateRequestInput,
+    viewer: Viewer
+): Promise<RequestDocument | null> => {
+    // Verifica si eres admin.
+    const filter = viewer.isAdmin
+        ? { _id: requestId }
+        : { _id: requestId, requester: viewer.id, isDeleted: false };
+
+    const request = await RequestModel.findOne(filter);
+
+    if (!request) {
+        return null;
+    }
+
+    if (request.status !== 'PENDING' || request.isDeleted) {
+        throw httpError(409, 'Solo se puede modificar una solicitud pendiente');
+    }
+
+    const changes: UpdateRequestInput = {};
+
+    if (data.subject !== undefined) {
+        changes.subject = data.subject;
+    }
+
+    if (data.description !== undefined) {
+        changes.description = data.description;
+    }
+
+    if (data.type !== undefined) {
+        changes.type = data.type;
+    }
+
+    if (data.preferredDate !== undefined) {
+        changes.preferredDate = data.preferredDate;
+    }
+
+    return RequestModel.findOneAndUpdate({ _id: requestId, status: 'PENDING', isDeleted: false }, changes, {
+        new: true,
+        runValidators: true
+    }).populate(POPULATE_REQUEST);
+};
+
+// Cambia el estado de una solicitud y apunta el paso en el historial.
+export const changeStatus = async (
+    requestId: string,
+    nextStatus: RequestStatus,
+    comment: string | undefined,
+    viewer: Viewer
+): Promise<RequestDocument | null> => {
+    // Una solicitud borrada con soft delete la evitamos.
+    const filter = viewer.isAdmin
+        ? { _id: requestId, isDeleted: false }
+        : { _id: requestId, requester: viewer.id, isDeleted: false };
+
+    const request = await RequestModel.findOne(filter);
+
+    if (!request) {
+        return null;
+    }
+
+    const current = request.status;
+
+    // Una solicitud completada ya no se mueve.
+    if (current === 'COMPLETED') {
+        throw httpError(409, 'Una solicitud completada ya no se puede cambiar');
+    }
+
+    if (!viewer.isAdmin && nextStatus !== 'CANCELLED') {
+        throw httpError(409, 'Solo se puede cancelar una solicitud propia');
+    }
+
+    const lastVersion = request.history.length > 0 ? request.history[request.history.length - 1].version : 0;
+
+    const step = {
+        status: nextStatus,
+        comment,
+        at: new Date(),
+        by: new mongoose.Types.ObjectId(viewer.id),
+        automatic: false,
+        version: lastVersion + 1
+    };
+
+    // Estado y historial guardados.
+    return RequestModel.findByIdAndUpdate(
+        requestId,
+        { status: nextStatus, $push: { history: step } },
+        { new: true, runValidators: true }
+    ).populate(POPULATE_REQUEST);
+};
+
+export const softDeleteRequest = (requestId: string, viewer: Viewer): Promise<RequestDocument | null> => {
+    const filter = viewer.isAdmin
+        ? { _id: requestId, isDeleted: false }
+        : { _id: requestId, requester: viewer.id, isDeleted: false };
+
+    return RequestModel.findOneAndUpdate(filter, { isDeleted: true, deletedAt: new Date() }, { new: true }).populate(
+        POPULATE_REQUEST
+    );
+};
+
+export const hardDeleteRequest = (requestId: string, viewer: Viewer): Promise<RequestDocument | null> => {
+    const filter = viewer.isAdmin ? { _id: requestId } : { _id: requestId, requester: viewer.id };
+
+    return RequestModel.findOneAndDelete(filter);
+};
+
+export const softDeleteManyRequests = async (ids: string[]): Promise<number> => {
+    const result = await RequestModel.updateMany(
+        { _id: { $in: ids }, isDeleted: false },
+        { isDeleted: true, deletedAt: new Date() }
+    );
+
+    return result.modifiedCount;
+};
+
+export const hardDeleteManyRequests = async (ids: string[]): Promise<number> => {
+    const result = await RequestModel.deleteMany({ _id: { $in: ids } });
+
+    return result.deletedCount;
+};
+
 export default {
     createRequest,
     getRequestForAccess,
     getRequestById,
+    updateRequest,
+    changeStatus,
+    softDeleteRequest,
+    hardDeleteRequest,
+    softDeleteManyRequests,
+    hardDeleteManyRequests,
     listRequests
 };
